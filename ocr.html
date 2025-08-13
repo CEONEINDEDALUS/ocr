@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural OCR - Handwritten Digit Recognition</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 24px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        h1 {
+            color: #2d3748;
+            margin-bottom: 8px;
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: #718096;
+            margin-bottom: 32px;
+            font-size: 1.1rem;
+        }
+
+        .canvas-container {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 32px;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            background: #1a202c;
+        }
+
+        #canvas {
+            display: block;
+            cursor: crosshair;
+            background: #1a202c;
+        }
+
+        .grid-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            opacity: 0.3;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .digit-input-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #f7fafc;
+            padding: 12px 20px;
+            border-radius: 12px;
+            border: 2px solid #e2e8f0;
+            transition: all 0.3s ease;
+        }
+
+        .digit-input-group:focus-within {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .digit-input-group label {
+            font-weight: 600;
+            color: #4a5568;
+            font-size: 1.1rem;
+        }
+
+        #digit {
+            border: none;
+            background: transparent;
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #2d3748;
+            width: 40px;
+            text-align: center;
+            outline: none;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            min-width: 100px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            color: white;
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: #4a5568;
+            border: 2px solid #e2e8f0;
+        }
+
+        .btn-outline:hover {
+            background: #f7fafc;
+            border-color: #cbd5e0;
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 16px;
+            border-radius: 12px;
+            font-weight: 500;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+        }
+
+        .status.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .status.success {
+            background: rgba(72, 187, 120, 0.1);
+            color: #2f855a;
+            border: 1px solid rgba(72, 187, 120, 0.2);
+        }
+
+        .status.error {
+            background: rgba(229, 62, 62, 0.1);
+            color: #c53030;
+            border: 1px solid rgba(229, 62, 62, 0.2);
+        }
+
+        .status.info {
+            background: rgba(102, 126, 234, 0.1);
+            color: #553c9a;
+            border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+
+        .training-counter {
+            background: rgba(102, 126, 234, 0.1);
+            color: #553c9a;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .processing {
+            animation: pulse 1.5s infinite;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 24px;
+                margin: 10px;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .button-group {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Neural OCR</h1>
+        <p class="subtitle">Draw a digit and let AI recognize it</p>
+        
+        <div class="training-counter" id="trainingCounter">
+            Training samples: <span id="trainingCount">0</span>/5
+        </div>
+
+        <div class="canvas-container">
+            <canvas id="canvas" width="200" height="200"></canvas>
+        </div>
+
+        <div class="controls">
+            <div class="digit-input-group">
+                <label for="digit">Digit:</label>
+                <input type="number" id="digit" min="0" max="9" placeholder="0-9">
+            </div>
+
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="ocrDemo.train()" id="trainBtn">
+                    🧠 Train
+                </button>
+                <button class="btn btn-secondary" onclick="ocrDemo.test()" id="testBtn">
+                    🔍 Predict
+                </button>
+                <button class="btn btn-outline" onclick="ocrDemo.resetCanvas()">
+                    🗑️ Clear
+                </button>
+            </div>
+        </div>
+
+        <div class="status" id="status"></div>
+    </div>
+
+    <script>
+        var ocrDemo = {
+            CANVAS_WIDTH: 200,
+            TRANSLATED_WIDTH: 20,
+            PIXEL_WIDTH: 10,
+            BATCH_SIZE: 5,
+            HOST: '',
+            PORT: '',
+            BLUE: '#4299e1',
+            WHITE: '#ffffff',
+            BLACK: '#1a202c',
+            
+            data: [],
+            trainArray: [],
+            trainingRequestCount: 0,
+
+            onLoadFunction: function() {
+                var canvas = document.getElementById('canvas');
+                var ctx = canvas.getContext('2d');
+                
+                this.resetCanvas();
+                
+                // Mouse events
+                canvas.addEventListener('mousedown', (e) => this.onMouseDown(e, ctx, canvas));
+                canvas.addEventListener('mousemove', (e) => this.onMouseMove(e, ctx, canvas));
+                canvas.addEventListener('mouseup', (e) => this.onMouseUp(e, canvas));
+                
+                // Touch events for mobile
+                canvas.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    var touch = e.touches[0];
+                    var rect = canvas.getBoundingClientRect();
+                    var x = touch.clientX - rect.left;
+                    var y = touch.clientY - rect.top;
+                    
+                    // Only start drawing if touch is within canvas boundaries
+                    if (x >= 0 && x < this.CANVAS_WIDTH && y >= 0 && y < this.CANVAS_WIDTH) {
+                        var mouseEvent = new MouseEvent('mousedown', {
+                            clientX: touch.clientX,
+                            clientY: touch.clientY
+                        });
+                        canvas.dispatchEvent(mouseEvent);
+                    }
+                });
+                
+                canvas.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    var touch = e.touches[0];
+                    var rect = canvas.getBoundingClientRect();
+                    var x = touch.clientX - rect.left;
+                    var y = touch.clientY - rect.top;
+                    
+                    // Only draw if within canvas boundaries
+                    if (x >= 0 && x < this.CANVAS_WIDTH && y >= 0 && y < this.CANVAS_WIDTH) {
+                        var mouseEvent = new MouseEvent('mousemove', {
+                            clientX: touch.clientX,
+                            clientY: touch.clientY
+                        });
+                        canvas.dispatchEvent(mouseEvent);
+                    }
+                });
+                
+                canvas.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    var mouseEvent = new MouseEvent('mouseup', {});
+                    canvas.dispatchEvent(mouseEvent);
+                });
+            },
+
+            drawGrid: function(ctx) {
+                ctx.strokeStyle = this.BLUE;
+                ctx.lineWidth = 0.5;
+                ctx.globalAlpha = 0.3;
+                
+                for (var x = this.PIXEL_WIDTH; x < this.CANVAS_WIDTH; x += this.PIXEL_WIDTH) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, this.CANVAS_WIDTH);
+                    ctx.stroke();
+                }
+                
+                for (var y = this.PIXEL_WIDTH; y < this.CANVAS_WIDTH; y += this.PIXEL_WIDTH) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(this.CANVAS_WIDTH, y);
+                    ctx.stroke();
+                }
+                
+                ctx.globalAlpha = 1.0;
+            },
+
+            onMouseMove: function(e, ctx, canvas) {
+                if (!canvas.isDrawing) return;
+                
+                var rect = canvas.getBoundingClientRect();
+                var x = e.clientX - rect.left;
+                var y = e.clientY - rect.top;
+                
+                // Only draw if within canvas boundaries
+                if (x >= 0 && x < this.CANVAS_WIDTH && y >= 0 && y < this.CANVAS_WIDTH) {
+                    this.fillSquare(ctx, x, y);
+                }
+            },
+
+            onMouseDown: function(e, ctx, canvas) {
+                var rect = canvas.getBoundingClientRect();
+                var x = e.clientX - rect.left;
+                var y = e.clientY - rect.top;
+                
+                // Only start drawing if click is within canvas boundaries
+                if (x >= 0 && x < this.CANVAS_WIDTH && y >= 0 && y < this.CANVAS_WIDTH) {
+                    canvas.isDrawing = true;
+                    this.fillSquare(ctx, x, y);
+                }
+            },
+
+            onMouseUp: function(e, canvas) {
+                canvas.isDrawing = false;
+            },
+
+            fillSquare: function(ctx, x, y) {
+                var xPixel = Math.floor(x / this.PIXEL_WIDTH);
+                var yPixel = Math.floor(y / this.PIXEL_WIDTH);
+                
+                if (xPixel >= 0 && xPixel < this.TRANSLATED_WIDTH && 
+                    yPixel >= 0 && yPixel < this.TRANSLATED_WIDTH) {
+                    
+                    var index = yPixel * this.TRANSLATED_WIDTH + xPixel;
+                    this.data[index] = 1;
+
+                    ctx.fillStyle = this.WHITE;
+                    ctx.fillRect(xPixel * this.PIXEL_WIDTH, yPixel * this.PIXEL_WIDTH, 
+                        this.PIXEL_WIDTH, this.PIXEL_WIDTH);
+                }
+            },
+
+            resetCanvas: function() {
+                var canvas = document.getElementById('canvas');
+                var ctx = canvas.getContext('2d');
+                
+                // Clear canvas
+                ctx.fillStyle = this.BLACK;
+                ctx.fillRect(0, 0, this.CANVAS_WIDTH, this.CANVAS_WIDTH);
+                
+                // Reset data
+                this.data = new Array(this.TRANSLATED_WIDTH * this.TRANSLATED_WIDTH).fill(0);
+                
+                // Draw grid
+                this.drawGrid(ctx);
+                
+                this.hideStatus();
+            },
+
+            train: function() {
+                var digitVal = document.getElementById("digit").value;
+                
+                if (!digitVal || digitVal < 0 || digitVal > 9 || this.data.indexOf(1) < 0) {
+                    this.showStatus("Please draw a digit and enter its value (0-9)", "error");
+                    return;
+                }
+
+                this.trainArray.push({
+                    "y0": [...this.data],
+                    "label": parseInt(digitVal)
+                });
+                this.trainingRequestCount++;
+
+                this.updateTrainingCounter();
+
+                if (this.trainingRequestCount == this.BATCH_SIZE) {
+                    this.showStatus("Sending training batch to neural network...", "info");
+                    document.getElementById('trainBtn').classList.add('processing');
+                    
+                    var json = {
+                        trainArray: this.trainArray,
+                        train: true
+                    };
+
+                    this.sendData(json);
+                    this.trainingRequestCount = 0;
+                    this.trainArray = [];
+                } else {
+                    this.showStatus(`Added to training batch (${this.trainingRequestCount}/${this.BATCH_SIZE})`, "success");
+                    setTimeout(() => this.resetCanvas(), 1000);
+                }
+            },
+
+            test: function() {
+                if (this.data.indexOf(1) < 0) {
+                    this.showStatus("Please draw a digit to test the network", "error");
+                    return;
+                }
+                
+                this.showStatus("Analyzing your drawing...", "info");
+                document.getElementById('testBtn').classList.add('processing');
+                
+                var json = {
+                    image: this.data,
+                    predict: true
+                };
+                this.sendData(json);
+            },
+
+            updateTrainingCounter: function() {
+                document.getElementById('trainingCount').textContent = this.trainingRequestCount;
+            },
+
+            showStatus: function(message, type) {
+                var status = document.getElementById('status');
+                status.textContent = message;
+                status.className = `status ${type} show`;
+            },
+
+            hideStatus: function() {
+                var status = document.getElementById('status');
+                status.classList.remove('show');
+            },
+
+            receiveResponse: function(xmlHttp) {
+                document.getElementById('trainBtn').classList.remove('processing');
+                document.getElementById('testBtn').classList.remove('processing');
+                
+                if (xmlHttp.status != 200) {
+                    this.showStatus(`Server error: ${xmlHttp.status}`, "error");
+                    return;
+                }
+                
+                try {
+                    var responseJSON = JSON.parse(xmlHttp.responseText);
+                    if (responseJSON.type == "test") {
+                        this.showStatus(`🎯 Neural network predicts: ${responseJSON.result}`, "success");
+                    } else {
+                        this.showStatus("Training batch completed successfully!", "success");
+                        this.updateTrainingCounter();
+                        setTimeout(() => this.resetCanvas(), 1500);
+                    }
+                } catch (e) {
+                    this.showStatus("Invalid response from server", "error");
+                }
+            },
+
+            onError: function(xmlHttp) {
+                document.getElementById('trainBtn').classList.remove('processing');
+                document.getElementById('testBtn').classList.remove('processing');
+                this.showStatus("Connection error. Make sure the server is running.", "error");
+            },
+
+            sendData: function(json) {
+                var xmlHttp = new XMLHttpRequest();
+                xmlHttp.open('POST', window.location.origin + '/predict', true);
+                xmlHttp.onload = () => this.receiveResponse(xmlHttp);
+                xmlHttp.onerror = () => this.onError(xmlHttp);
+                
+                var msg = JSON.stringify(json);
+                xmlHttp.setRequestHeader('Content-Type', 'application/json');
+                xmlHttp.setRequestHeader('Content-length', msg.length);
+                xmlHttp.send(msg);
+            }
+        };
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            ocrDemo.onLoadFunction();
+        });
+    </script>
+</body>
+</html>
